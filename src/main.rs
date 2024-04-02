@@ -1,52 +1,93 @@
+mod config;
+use config::*;
+
 use std::env;
 
-use serenity::all::{GuildId, RoleId};
+use serenity::all::{ChannelId, GuildId, RoleId};
 use serenity::async_trait;
+use serenity::builder::{CreateEmbed, CreateMessage};
 use serenity::model::channel::Message;
-use serenity::model::guild::Guild;
+
 use serenity::model::gateway::Ready;
-use serenity::builder::CreateMessage;
+use serenity::model::guild::Guild;
 use serenity::prelude::*;
+
+use regex::Regex;
 
 static TOKEN: &str = "MTIyNDc2NDYxNjI1NzcwNDAwNw.G5onuT.qB0N6EN9Sm_xqKPtThITN18TLKSwus2aoV7Z30";
 
 struct Handler;
+
+fn message_contains_invite(msg: &str) -> bool {
+    let re = Regex::new(r"discord\.gg/\S*").unwrap();
+
+    re.find(msg).is_some()
+}
 
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
         let guild_id = match msg.guild_id {
             Some(id) => id,
-            None => return
+            None => return,
         };
 
+        let config: BotConfig = get_config(guild_id);
+
         let mut role_ids: Vec<RoleId> = vec![];
-        
+
         let roles = guild_id.roles(&ctx.http).await.unwrap();
         for (role_id, role) in roles {
             println!("{} {}", role_id, role.name);
-            if role.name == "Verified" || role.name == "Trusted" {
+            if config.whitelisted_roles.contains(&role.name) {
                 role_ids.push(role_id);
             }
         }
 
         let mut author_is_verified = false;
         for role_id in role_ids {
-            if msg.author.has_role(&ctx.http, guild_id, role_id).await.unwrap() {
+            if msg
+                .author
+                .has_role(&ctx.http, guild_id, role_id)
+                .await
+                .unwrap()
+            {
                 author_is_verified = true;
                 break;
             }
         }
 
-        if msg.content == "invite" && !author_is_verified {
+        if !author_is_verified && message_contains_invite(&msg.content) {
+            let embed = CreateEmbed::new()
+                .title("Deleted message")
+                .description(msg.content.clone());
 
-            //msg.reply(&ctx.http, "Hey!").await.unwrap();
+            let message_to_mods = CreateMessage::new()
+                .content(format!(
+                    "Deleted the following message sent by @{} in #{}",
+                    msg.author.name,
+                    msg.channel_id.name(&ctx.http).await.unwrap()
+                ))
+                .embed(embed.clone());
 
-            msg.author.direct_message(&ctx.http, CreateMessage::new().content("Hello")).await.unwrap();
+            // Post a message in the moderator log
+            if let Some(channel_id) = config.mod_log_channel_id {
+                ChannelId::from(channel_id)
+                    .send_message(&ctx.http, message_to_mods)
+                    .await
+                    .unwrap();
+            }
+
+            let message_to_author = CreateMessage::new()
+                .content("Unverified members are not allowed to post invites. Your message has been deleted")
+                .add_embed(embed);
+
+            msg.author
+                .direct_message(&ctx.http, message_to_author)
+                .await
+                .unwrap();
 
             msg.delete(&ctx.http).await.unwrap();
-
-            //msg.channel_id.
 
             // Sending a message can fail, due to a network error, an authentication error, or lack
             // of permissions to post in the channel, so log to stdout when some error happens,
@@ -78,8 +119,10 @@ async fn main() {
 
     // Create a new instance of the Client, logging in as a bot. This will automatically prepend
     // your bot token with "Bot ", which is a requirement by Discord for bot users.
-    let mut client =
-        Client::builder(&TOKEN, intents).event_handler(Handler).await.expect("Err creating client");
+    let mut client = Client::builder(&TOKEN, intents)
+        .event_handler(Handler)
+        .await
+        .expect("Err creating client");
 
     // Finally, start a single shard, and start listening to events.
     //
