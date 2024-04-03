@@ -3,14 +3,14 @@ use config::*;
 
 mod commands;
 
-use std::env;
+// use std::env;
 
-use serenity::all::{ChannelId, GuildId, Interaction, RoleId, UserId};
+use serenity::all::{ChannelId, Interaction, RoleId};
 use serenity::builder::{
     CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage,
 };
 use serenity::model::channel::Message;
-use serenity::{async_trait, Result};
+use serenity::async_trait;
 
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
@@ -25,8 +25,6 @@ fn message_contains_invite(msg: &str) -> bool {
     re.find(msg).is_some()
 }
 
-fn handle_result(r: Result<()>) {}
-
 async fn handle_message_with_invite(ctx: &Context, msg: &Message, config: &BotConfig) {
     // Create an embed whose contents are that of the message that's being deleted
     let embed = CreateEmbed::new()
@@ -40,7 +38,7 @@ async fn handle_message_with_invite(ctx: &Context, msg: &Message, config: &BotCo
     let message_to_mods = CreateMessage::new()
         .content(format!(
             "Deleted the following message sent by @{} in #{}",
-            msg.author.name,
+            msg.author.tag(),
             msg.channel_id.name(&ctx.http).await.unwrap()
         ))
         .embed(embed.clone());
@@ -118,7 +116,7 @@ impl EventHandler for Handler {
             println!("Received command interaction: {command:#?}");
 
             let content = match command.data.name.as_str() {
-                "ping" => Some(commands::run(&command.data.options())),
+                "ping" => Some(commands::run(&command.data.options(), &command.guild_id.unwrap())),
                 _ => Some("not implemented :(".to_string()),
             };
 

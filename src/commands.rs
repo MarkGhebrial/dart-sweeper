@@ -1,15 +1,30 @@
 use serenity::all::CommandOptionType;
 use serenity::all::Permissions;
-use serenity::all::{RoleId, Role};
+use serenity::all::GuildId;
 use serenity::builder::CreateCommand;
 use serenity::builder::CreateCommandOption;
-use serenity::model::application::ResolvedOption;
+use serenity::model::application::{ResolvedOption, ResolvedValue};
 
-pub fn run(_options: &[ResolvedOption]) -> String {
+use crate::{get_config, write_config};
 
-    // let role: Role = _options[0].value.try_into().unwrap();
+pub fn run(options: &[ResolvedOption], guild: &GuildId) -> String {
 
-    "Hey, I'm alive!".to_string()
+    let role = if let Some(ResolvedOption {
+        name: _name,
+        value: ResolvedValue::Role(role),
+        ..
+    }) = options.first() {
+        role
+    } else {
+        return "Please provide a valid role.".to_string();
+    };
+
+    // Update the configuration
+    let mut config = get_config(&guild);
+    config.whitelisted_roles.push(role.id);
+    write_config(&guild, &config);
+
+    format!("Role {} can now post invites.", role.name)
 }
 
 pub fn register() -> CreateCommand {

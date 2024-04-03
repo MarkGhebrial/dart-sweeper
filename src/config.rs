@@ -3,7 +3,7 @@ use serenity::all::RoleId;
 
 use serde::{Deserialize, Serialize};
 
-use std::fs::{DirBuilder, File, OpenOptions};
+use std::fs::{DirBuilder, File};
 use std::path::Path;
 
 use std::io::{Read, Write};
