@@ -1,12 +1,16 @@
 mod config;
 use config::*;
 
+mod commands;
+
 use std::env;
 
-use serenity::all::{ChannelId, GuildId, RoleId};
-use serenity::async_trait;
-use serenity::builder::{CreateEmbed, CreateMessage};
+use serenity::all::{ChannelId, GuildId, Interaction, RoleId, UserId};
+use serenity::builder::{
+    CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage,
+};
 use serenity::model::channel::Message;
+use serenity::{async_trait, Result};
 
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
@@ -20,6 +24,49 @@ fn message_contains_invite(msg: &str) -> bool {
 
     re.find(msg).is_some()
 }
+
+fn handle_result(r: Result<()>) {}
+
+async fn handle_message_with_invite(ctx: &Context, msg: &Message, config: &BotConfig) {
+    // Create an embed whose contents are that of the message that's being deleted
+    let embed = CreateEmbed::new()
+        .title("Deleted message")
+        .description(msg.content.clone());
+
+    // Delete the message
+    msg.delete(&ctx.http).await.unwrap();
+
+    // Compose the message for the moderator log
+    let message_to_mods = CreateMessage::new()
+        .content(format!(
+            "Deleted the following message sent by @{} in #{}",
+            msg.author.name,
+            msg.channel_id.name(&ctx.http).await.unwrap()
+        ))
+        .embed(embed.clone());
+
+    // Post the message in the moderator log
+    if let Some(channel_id) = config.mod_log_channel_id {
+        ChannelId::from(channel_id)
+            .send_message(&ctx.http, message_to_mods)
+            .await
+            .unwrap();
+    }
+
+    // Compose a message to the author of the deleted message
+    let message_to_author = CreateMessage::new()
+        .content(
+            "Unverified members are not allowed to post invites. Your message has been deleted",
+        )
+        .add_embed(embed);
+
+    // DM that message to the author of the deleted message
+    msg.author
+        .direct_message(&ctx.http, message_to_author)
+        .await
+        .unwrap();
+}
+
 struct Handler;
 
 #[async_trait]
@@ -30,14 +77,14 @@ impl EventHandler for Handler {
             None => return,
         };
 
-        let config: BotConfig = get_config(guild_id);
+        let config: BotConfig = get_config(&guild_id);
 
         let mut role_ids: Vec<RoleId> = vec![];
 
         let roles = guild_id.roles(&ctx.http).await.unwrap();
         for (role_id, role) in roles {
             println!("{} {}", role_id, role.name);
-            if config.whitelisted_roles.contains(&role.name) {
+            if config.whitelisted_roles.contains(&role_id) {
                 role_ids.push(role_id);
             }
         }
@@ -55,37 +102,33 @@ impl EventHandler for Handler {
             }
         }
 
+        // let mut author_is_mod = false;
+        // for role_id in mod_role_ids {
+        //     if user has the role:
+        //         author_is_mod = true;
+        // }
+
         if !author_is_verified && message_contains_invite(&msg.content) {
-            let embed = CreateEmbed::new()
-                .title("Deleted message")
-                .description(msg.content.clone());
+            handle_message_with_invite(&ctx, &msg, &config).await;
+        }
+    }
 
-            let message_to_mods = CreateMessage::new()
-                .content(format!(
-                    "Deleted the following message sent by @{} in #{}",
-                    msg.author.name,
-                    msg.channel_id.name(&ctx.http).await.unwrap()
-                ))
-                .embed(embed.clone());
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        if let Interaction::Command(command) = interaction {
+            println!("Received command interaction: {command:#?}");
 
-            // Post a message in the moderator log
-            if let Some(channel_id) = config.mod_log_channel_id {
-                ChannelId::from(channel_id)
-                    .send_message(&ctx.http, message_to_mods)
-                    .await
-                    .unwrap();
+            let content = match command.data.name.as_str() {
+                "ping" => Some(commands::run(&command.data.options())),
+                _ => Some("not implemented :(".to_string()),
+            };
+
+            if let Some(content) = content {
+                let data = CreateInteractionResponseMessage::new().content(content);
+                let builder = CreateInteractionResponse::Message(data);
+                if let Err(why) = command.create_response(&ctx.http, builder).await {
+                    println!("Cannot respond to slash command: {why}");
+                }
             }
-
-            let message_to_author = CreateMessage::new()
-                .content("Unverified members are not allowed to post invites. Your message has been deleted")
-                .add_embed(embed);
-
-            msg.author
-                .direct_message(&ctx.http, message_to_author)
-                .await
-                .unwrap();
-
-            msg.delete(&ctx.http).await.unwrap();
         }
     }
 
@@ -94,8 +137,17 @@ impl EventHandler for Handler {
     // Ids, current user data, private channels, and more.
     //
     // In this case, just print what the current user's username is.
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
+
+        for guild in ready.guilds {
+            let commands = guild
+                .id
+                .set_commands(&ctx.http, vec![commands::register()])
+                .await;
+
+            println!("Created the following commands in guild {guild:?}: {commands:?}");
+        }
     }
 }
 
