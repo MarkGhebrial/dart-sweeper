@@ -2,7 +2,7 @@ use serenity::all::GuildId;
 
 use serde::{Deserialize, Serialize};
 
-use std::fs::{File, DirBuilder};
+use std::fs::{File, DirBuilder, OpenOptions};
 use std::path::Path;
 
 use std::io::{Read, Write};
@@ -33,27 +33,20 @@ pub fn get_config(guild: GuildId) -> BotConfig {
     let mut file = match File::open(&path) {
         Ok(file) => file,
         Err(_e) => {
+            // Create the directory
             DirBuilder::new().recursive(true).create(CONFIG_PATH).unwrap();
+            // Create the file
+            let mut file = File::create(&path).unwrap();
 
-            match File::create(&path) {
-                Ok(mut file) => {
-                    let file_contents = toml::to_string(&BotConfig::default()).unwrap();
-
-                    file.write(file_contents.as_bytes()).unwrap();
-                    file
-                },
-                Err(e) => panic!("{:?}", e)
-            }
+            // Write the default configuration to the file
+            let file_contents = toml::to_string(&BotConfig::default()).unwrap();
+            file.write(file_contents.as_bytes()).unwrap();
+            
+            return BotConfig::default();
         }
     };
 
-    // let mut file = OpenOptions::new()
-    //     .read(true)
-    //     .write(true)
-    //     .create(true)
-    //     .open(path)
-    //     .unwrap();
-
+    // Read and parse the config file
     let mut s = String::new();
     file.read_to_string(&mut s).unwrap();
     toml::from_str(&s).unwrap()

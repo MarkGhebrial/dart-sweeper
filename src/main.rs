@@ -9,20 +9,18 @@ use serenity::builder::{CreateEmbed, CreateMessage};
 use serenity::model::channel::Message;
 
 use serenity::model::gateway::Ready;
-use serenity::model::guild::Guild;
 use serenity::prelude::*;
 
 use regex::Regex;
 
 static TOKEN: &str = "MTIyNDc2NDYxNjI1NzcwNDAwNw.G5onuT.qB0N6EN9Sm_xqKPtThITN18TLKSwus2aoV7Z30";
 
-struct Handler;
-
 fn message_contains_invite(msg: &str) -> bool {
     let re = Regex::new(r"discord\.gg/\S*").unwrap();
 
     re.find(msg).is_some()
 }
+struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -88,13 +86,6 @@ impl EventHandler for Handler {
                 .unwrap();
 
             msg.delete(&ctx.http).await.unwrap();
-
-            // Sending a message can fail, due to a network error, an authentication error, or lack
-            // of permissions to post in the channel, so log to stdout when some error happens,
-            // with a description of it.
-            if let Err(why) = msg.channel_id.say(&ctx.http, "Pong!").await {
-                println!("Error sending message: {why:?}");
-            }
         }
     }
 
