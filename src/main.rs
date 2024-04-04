@@ -2,15 +2,16 @@ mod config;
 use config::*;
 
 mod commands;
+use commands::*;
 
 // use std::env;
 
-use serenity::all::{ChannelId, Interaction, RoleId};
+use serenity::all::{ChannelId, Interaction};
+use serenity::async_trait;
 use serenity::builder::{
     CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage,
 };
 use serenity::model::channel::Message;
-use serenity::async_trait;
 
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
@@ -25,21 +26,21 @@ fn message_contains_invite(msg: &str) -> bool {
     re.find(msg).is_some()
 }
 
-async fn handle_message_with_invite(ctx: &Context, msg: &Message, config: &BotConfig) {
+async fn handle_message_with_invite(ctx: &Context, msg: &Message, config: &BotConfig) -> serenity::Result<()> {
     // Create an embed whose contents are that of the message that's being deleted
     let embed = CreateEmbed::new()
         .title("Deleted message")
         .description(msg.content.clone());
 
     // Delete the message
-    msg.delete(&ctx.http).await.unwrap();
+    msg.delete(&ctx.http).await?;
 
     // Compose the message for the moderator log
     let message_to_mods = CreateMessage::new()
         .content(format!(
             "Deleted the following message sent by @{} in #{}",
             msg.author.tag(),
-            msg.channel_id.name(&ctx.http).await.unwrap()
+            msg.channel_id.name(&ctx.http).await?
         ))
         .embed(embed.clone());
 
@@ -47,8 +48,7 @@ async fn handle_message_with_invite(ctx: &Context, msg: &Message, config: &BotCo
     if let Some(channel_id) = config.mod_log_channel_id {
         ChannelId::from(channel_id)
             .send_message(&ctx.http, message_to_mods)
-            .await
-            .unwrap();
+            .await?;
     }
 
     // Compose a message to the author of the deleted message
@@ -61,8 +61,9 @@ async fn handle_message_with_invite(ctx: &Context, msg: &Message, config: &BotCo
     // DM that message to the author of the deleted message
     msg.author
         .direct_message(&ctx.http, message_to_author)
-        .await
-        .unwrap();
+        .await?;
+
+    serenity::Result::Ok(())
 }
 
 struct Handler;
@@ -77,18 +78,8 @@ impl EventHandler for Handler {
 
         let config: BotConfig = get_config(&guild_id);
 
-        let mut role_ids: Vec<RoleId> = vec![];
-
-        let roles = guild_id.roles(&ctx.http).await.unwrap();
-        for (role_id, role) in roles {
-            println!("{} {}", role_id, role.name);
-            if config.whitelisted_roles.contains(&role_id) {
-                role_ids.push(role_id);
-            }
-        }
-
         let mut author_is_verified = false;
-        for role_id in role_ids {
+        for role_id in &config.whitelisted_roles {
             if msg
                 .author
                 .has_role(&ctx.http, guild_id, role_id)
@@ -100,23 +91,27 @@ impl EventHandler for Handler {
             }
         }
 
-        // let mut author_is_mod = false;
-        // for role_id in mod_role_ids {
-        //     if user has the role:
-        //         author_is_mod = true;
-        // }
-
         if !author_is_verified && message_contains_invite(&msg.content) {
-            handle_message_with_invite(&ctx, &msg, &config).await;
+            if let Err(e) = handle_message_with_invite(&ctx, &msg, &config).await {
+                println!("Encountered an error while processing a message with and invite: {e:#?}");
+            };
         }
     }
 
+    // Handle slash commands
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::Command(command) = interaction {
             println!("Received command interaction: {command:#?}");
 
             let content = match command.data.name.as_str() {
-                "ping" => Some(commands::run(&command.data.options(), &command.guild_id.unwrap())),
+                "whitelist" => Some(commands::whitelist_role(
+                    &command.data.options(),
+                    &command.guild_id.unwrap(),
+                )),
+                "unwhitelist" => Some(commands::unwhitelist_role(
+                    &command.data.options(),
+                    &command.guild_id.unwrap(),
+                )),
                 _ => Some("not implemented :(".to_string()),
             };
 
@@ -138,14 +133,8 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
-        for guild in ready.guilds {
-            let commands = guild
-                .id
-                .set_commands(&ctx.http, vec![commands::register()])
-                .await;
-
-            println!("Created the following commands in guild {guild:?}: {commands:?}");
-        }
+        // Register the bot's slash commands
+        register_commands(&ctx.http).await;
     }
 }
 
