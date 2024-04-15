@@ -1,5 +1,7 @@
+use serenity::all::ChannelId;
 use serenity::all::Command;
 use serenity::all::CommandOptionType;
+use serenity::all::Context;
 use serenity::all::GuildId;
 use serenity::all::Permissions;
 use serenity::builder::CreateCommand;
@@ -52,6 +54,45 @@ pub fn unwhitelist_role(options: &[ResolvedOption], guild: &GuildId) -> String {
     format!("Role {} can no longer post invites.", role.name)
 }
 
+//                   Rust gets cranky if this lifetime is omitted ----v
+pub async fn set_mod_channel(
+    ctx: &Context,
+    options: &[ResolvedOption<'_>],
+    guild: &GuildId,
+) -> String {
+    let channel = if let Some(ResolvedOption {
+        name: _name,
+        value: ResolvedValue::Channel(channel),
+        ..
+    }) = options.first()
+    {
+        channel
+    } else {
+        return "Please provide a valid channel".to_string();
+    };
+
+    let channel_id: ChannelId = channel.id.into();
+
+    let mut config = get_config(&guild);
+    config.mod_log_channel_id = Some(channel_id.into());
+    write_config(&guild, &config);
+
+    if let Err(_e) = channel_id
+        .say(&ctx.http, "Bot actions will now be logged here")
+        .await
+    {
+        return format!(
+            "Looks like the bot does not have permission to access #{}.",
+            channel.name.as_ref().unwrap()
+        );
+    }
+
+    format!(
+        "Bot actions will now be logged to channel #{}.",
+        channel.name.as_ref().unwrap()
+    )
+}
+
 pub async fn register_commands(cache_http: impl CacheHttp) {
     let whitelist_role_command = CreateCommand::new("whitelist")
         .description("Allow a role to send invites")
@@ -65,6 +106,7 @@ pub async fn register_commands(cache_http: impl CacheHttp) {
         .await
         .unwrap();
 
+    //------------------------------------------------------------------------------------
     let unwhitelist_role_command = CreateCommand::new("unwhitelist")
         .description("Disallow a role from sending invites")
         .add_option(
@@ -78,6 +120,19 @@ pub async fn register_commands(cache_http: impl CacheHttp) {
         .default_member_permissions(Permissions::MANAGE_MESSAGES);
 
     Command::create_global_command(&cache_http, unwhitelist_role_command)
+        .await
+        .unwrap();
+
+    //------------------------------------------------------------------------------------
+    let set_mod_channel_command = CreateCommand::new("setmodchannel")
+        .description("Choose which channel to log the bot's actions to")
+        .add_option(
+            CreateCommandOption::new(CommandOptionType::Channel, "channel", "Channel to set")
+                .required(true),
+        )
+        .default_member_permissions(Permissions::MANAGE_MESSAGES);
+
+    Command::create_global_command(&cache_http, set_mod_channel_command)
         .await
         .unwrap();
 }

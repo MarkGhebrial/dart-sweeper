@@ -8,7 +8,7 @@ use std::path::Path;
 
 use std::io::{Read, Write};
 
-static CONFIG_PATH: &str = "~/.config/dart-sweeper";
+static CONFIG_PATH: &str = "/etc/dart-sweeper";
 
 #[derive(Deserialize, Serialize)]
 pub struct BotConfig {

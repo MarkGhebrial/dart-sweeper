@@ -24,7 +24,11 @@ fn message_contains_invite(msg: &str) -> bool {
     re.find(msg).is_some()
 }
 
-async fn handle_message_with_invite(ctx: &Context, msg: &Message, config: &BotConfig) -> serenity::Result<()> {
+async fn handle_message_with_invite(
+    ctx: &Context,
+    msg: &Message,
+    config: &BotConfig,
+) -> serenity::Result<()> {
     // Create an embed whose contents are that of the message that's being deleted
     let embed = CreateEmbed::new()
         .title("Deleted message")
@@ -44,9 +48,10 @@ async fn handle_message_with_invite(ctx: &Context, msg: &Message, config: &BotCo
 
     // Post the message in the moderator log
     if let Some(channel_id) = config.mod_log_channel_id {
-        ChannelId::from(channel_id)
+        // We ignore any failures to post in the mod log
+        let _result = ChannelId::from(channel_id)
             .send_message(&ctx.http, message_to_mods)
-            .await?;
+            .await;
     }
 
     // Compose a message to the author of the deleted message
@@ -91,7 +96,7 @@ impl EventHandler for Handler {
 
         if !author_is_verified && message_contains_invite(&msg.content) {
             if let Err(e) = handle_message_with_invite(&ctx, &msg, &config).await {
-                println!("Encountered an error while processing a message with and invite: {e:#?}");
+                println!("Encountered an error while processing a message with an invite: {e:#?}");
             };
         }
     }
@@ -110,6 +115,14 @@ impl EventHandler for Handler {
                     &command.data.options(),
                     &command.guild_id.unwrap(),
                 )),
+                "setmodchannel" => Some(
+                    commands::set_mod_channel(
+                        &ctx,
+                        &command.data.options(),
+                        &command.guild_id.unwrap(),
+                    )
+                    .await,
+                ),
                 _ => Some("not implemented :(".to_string()),
             };
 
