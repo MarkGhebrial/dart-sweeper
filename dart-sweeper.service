@@ -1,0 +1,13 @@
+[Unit]
+Description=Anti-spam Discord bot
+After=multi-user.target
+
+[Service]
+Type=simple
+Restart=always
+ExecStart=/usr/bin/dart-sweeper
+
+Environment="DISCORD_TOKEN=replace me"
+
+[Install]
+WantedBy=multi-user.target
