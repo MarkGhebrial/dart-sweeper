@@ -4,7 +4,7 @@ use config::*;
 mod commands;
 use commands::*;
 
-// use std::env;
+use std::env;
 
 use serenity::all::{ChannelId, Interaction};
 use serenity::async_trait;
@@ -17,8 +17,6 @@ use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 
 use regex::Regex;
-
-static TOKEN: &str = "MTIyNDc2NDYxNjI1NzcwNDAwNw.G5onuT.qB0N6EN9Sm_xqKPtThITN18TLKSwus2aoV7Z30";
 
 fn message_contains_invite(msg: &str) -> bool {
     let re = Regex::new(r"discord\.gg/\S*").unwrap();
@@ -140,8 +138,8 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 async fn main() {
-    // // Configure the client with your Discord bot token in the environment.
-    // let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
@@ -149,7 +147,7 @@ async fn main() {
 
     // Create a new instance of the Client, logging in as a bot. This will automatically prepend
     // your bot token with "Bot ", which is a requirement by Discord for bot users.
-    let mut client = Client::builder(&TOKEN, intents)
+    let mut client = Client::builder(&token, intents)
         .event_handler(Handler)
         .await
         .expect("Err creating client");
