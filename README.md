@@ -4,7 +4,7 @@ A discord bot aimed at reducing spam on public servers.
 
 ## How it works
 
-The bot will delete messages that contain invite links to other servers. You can use slash commands to configure which roles can or cannot post invites.
+The bot will delete messages that contain invite links to other servers. It also logs its actions to a channel of your choosing. You can use slash commands to configure which roles can or cannot post invites.
 
 ## Setup
 
@@ -17,7 +17,7 @@ There are three slash commands currently implemented:
 2. `/unwhitelist <role>` will remove the specified role from the whitelist and prohibit it from posting invites.
 3. `/setmodchannel <channel>` will cause the bot to start logging its actions to the specified channel.
 
-*Important note: ONLY USERS WITH PERMISSION TO DELETE OTHER PEOPLE'S MESSAGES ARE ABLE TO RUN THESE SLASH COMMANDS*
+Only users with "Manage Messages" permissions are able to run these slash commands.
 
 TODO: Add commands to view whitelist and unnasign the mod channel.
 
